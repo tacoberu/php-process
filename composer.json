@@ -1,0 +1,23 @@
+{
+    "name": "tacoberu/php-process",
+    "description": "Wraper for calling process.",
+    "type": "library",
+    "keywords": ["bash", "sh", "process"],
+    "license": "MIT",
+    "require": {
+    	"php" : ">=5.3.0"
+    },
+    "authors": [
+        {
+            "name": "Martin Takáč",
+            "email": "martin@takac.name",
+			"homepage": "http://martin.takac.name"
+        }
+    ],
+    "autoload": {
+		"classmap": ["libs/"]
+    },
+    "require-dev": {
+        "tracy/tracy": "^2.5"
+    }
+}

@@ -124,4 +124,43 @@ Third line');
 		$process->setWorkDirectory(__dir__ . '/nope');
 	}
 
+
+
+	function testProcessedWithAgent()
+	{
+		$process = new Exec(__dir__ . '/bin/readwrite.php');
+
+		// Parametr je funkce zpracovávájící výstup a generující vstup.
+		// Pro ilustraci vložíme tři vstupy a ukončíme.
+		// Ukončení musí spolupracovat volaná aplikace. A nebo vynutit pomocí ^C. Což uděláme výjimkou.
+		$this->bank = ['jenda', 'dva', 'tři', ':q'];
+		$outs = new \ArrayObject();
+		$process->runAgent(function($out, $err) use ($outs) {
+			if ($err) {
+				throw new \RuntimeException('error', 10);
+			}
+			if ($out) {
+				$outs[] = $out;
+			}
+			if ( ! $this->bank) {
+				throw SignalException::interrupt();
+				//~ throw new SignalException('hmmm', 55);
+			}
+			$s = array_shift($this->bank) . "\n";
+			$outs[] = $s;
+			return $s;
+		});
+
+		$this->assertEquals([
+			'< ',
+			"jenda\n",
+			"> jenda\n\n< ",
+			"dva\n",
+			"> dva\n\n< ",
+			"tři\n",
+			"> tři\n\n< ",
+			":q\n",
+		], (array) $outs);
+	}
+
 }

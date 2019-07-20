@@ -10,10 +10,24 @@ namespace Taco\Utils\Process;
 /**
  * $res = (new Process\Exec('ping 127.0.0.1 -c 3'))->run();
  *
+ * $res = (new Process\Exec('ping'))
+ * 		->arg('127.0.0.1')
+ * 		->arg('-c 3')
+ * 		->setWorkingDirectory('..')
+ * 		->run();
+ *
+ * $code = (new Process\Exec('bin/readwrite.php'))
+ * 		->run(function($out, $err) {
+ *			echo '> ' . $out;
+ * 			return "Hi\n";
+ * 		});
+ *
  * @author Martin Takáč <martin@takac.name>
  */
 class Exec
 {
+
+	const CHUNK_SIZE = 16384;
 
 	/**
 	 * Příkaz.
@@ -72,10 +86,12 @@ class Exec
 	 * @return string
 	 * @uses   $command
 	 */
-	protected function buildCommand()
+	protected function buildCommand($err2out = True)
 	{
 		$args = $this->arguments;
-		$args[] = '2>&1';
+		if ($err2out) {
+			$args[] = '2>&1';
+		}
 		return $this->command . ' ' . implode(' ', $args);
 	}
 
@@ -119,6 +135,55 @@ class Exec
 
 
 	/**
+	 * Executes the command and returns return code. Param is agent (callback) for
+	 * comunication with script. Callback return input for script. Callback can throw
+	 * exception for error, or exception for interrupt signal.
+	 *
+	 * @param function($out:string, $err:string) : string
+	 * @return array array(return code, array with output)
+	 */
+	function runAgent($cb)
+	{
+		$process = proc_open($this->buildCommand(False), [
+			0 => array('pipe', 'r'),
+			1 => array('pipe', 'w'),
+			//~ 2 => array('pipe', 'w'), TODO zatím nevím, jak obsluhovat.
+		], $pipes, $this->workDirectory);
+		if (empty($process) || ! is_resource($process)) {
+			throw new ExecException($command, 'Cannot start process.', '', 1);
+		}
+
+		// Přečteme výstup. Pokud je prázdný, přečteme a zapíšeme vstup, pokud je vstup prázdný, čekáme vteřinu.
+		try {
+			while (True) {
+				if (feof($pipes[1])) {
+					break;
+				}
+				$output = self::read($pipes[1]);
+				//~ $error = self::read($pipes[2]); TODO zatím nevím, jak obsluhovat.
+				$error = '';
+				$res = $cb($output, $error);
+				if ($res) {
+					fwrite($pipes[0], $res);
+				}
+				else {
+					usleep(1000);
+				}
+			}
+		}
+		catch (SignalException $e) {
+			if ( ! $e->isSillenceExit()) {
+				self::close($pipes);
+				throw $e;
+			}
+		}
+		self::close($pipes);
+		return proc_close($process);
+	}
+
+
+
+	/**
 	 * Executes the command and returns return code and output.
 	 *
 	 * @return array array(return code, array with output)
@@ -145,6 +210,38 @@ class Exec
 		}
 		$this->arguments[] = $str;
 		return $this;
+	}
+
+
+
+	private static function read($p)
+	{
+		$ret = '';
+		do {
+			$chunk = self::CHUNK_SIZE;
+			if (isset($unread) && $chunk > $unread) {
+				$chunk = $unread;
+			}
+			$ret .= fread($p, $chunk);
+			$unread = self::unread($p);
+		} while ($unread);
+		return $ret;
+	}
+
+
+
+	private static function unread($p)
+	{
+		return stream_get_meta_data($p)['unread_bytes'];
+	}
+
+
+
+	private static function close(array $pipes)
+	{
+		foreach ($pipes as $pipe) {
+			fclose($pipe);
+		}
 	}
 
 }

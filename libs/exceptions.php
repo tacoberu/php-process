@@ -69,3 +69,25 @@ class ExecException extends \RuntimeException
 	}
 
 }
+
+
+
+class SignalException extends \RuntimeException
+{
+	const SIGNAL_INTERRUPT = 130;
+	const SIGNAL_PROCESS_ABORTED = 134;
+
+	static function interrupt()
+	{
+		return new static('Interrupt', self::SIGNAL_INTERRUPT);
+	}
+
+
+	function isSillenceExit()
+	{
+		return in_array($this->getCode(), [
+			self::SIGNAL_INTERRUPT,
+		], True);
+	}
+
+}
